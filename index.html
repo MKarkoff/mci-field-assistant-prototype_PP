@@ -1,16 +1,433 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PatientPoint CI Field Assistant</title>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #F5F3F0; }
-    </style>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>PatientPoint CI Field Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #F5F3F0; font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif; }
+button:hover { opacity: 0.92; }
+@keyframes slideIn { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes pulseRing { 0% { transform: scale(1); opacity: 0.4; } 100% { transform: scale(1.8); opacity: 0; } }
+@keyframes waveBar { 0%, 100% { height: 8px; } 50% { height: 28px; } }
+@keyframes loading { from { width: 0; } to { width: 100%; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const C = {
+  navy: "#0B1D3A", teal: "#00A5B5", tealDark: "#008A98", tealLight: "#E0F7FA",
+  slate: "#3A4A5C", warmGray: "#F5F3F0", white: "#FFFFFF", accent: "#FF6B35",
+  accentLight: "#FFF3ED", green: "#2ECC71", greenLight: "#EAFAF1", red: "#E74C3C",
+  redLight: "#FDEDEC", yellow: "#F39C12", yellowLight: "#FEF9E7", border: "#E8E6E3",
+  muted: "#8A8A8A",
+};
+
+// ── TRACKING ──
+const WEBHOOK_URL = "YOUR_PIPEDREAM_URL_HERE";
+const SID = `s_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+const SSTART = new Date().toISOString();
+function trk(action, details={}) {
+  if (WEBHOOK_URL === "YOUR_PIPEDREAM_URL_HERE") return;
+  fetch(WEBHOOK_URL, { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ session_id:SID, timestamp:new Date().toISOString(), session_start:SSTART, action, ...details,
+      device: /Mobi|Android/i.test(navigator.userAgent)?"mobile":"desktop",
+      screen: `${window.innerWidth}x${window.innerHeight}`, referrer: document.referrer||"direct",
+    }), keepalive:true }).catch(()=>{});
+}
+
+// ── DATA ──
+const COMPS = {
+  phreesia: { name:"Phreesia", ticker:"PHR", threat:"high", revenue:"$420-450M",
+    model:"Intake automation + ad overlay", reach:"150M+ patient visits",
+    weakness:["No physical in-office screens — digital only","Ad experience is secondary to intake workflow","No 100% SOV — shared attention during check-in","No MRC accreditation for ad metrics"],
+    ourEdge:["100% share of voice, full-screen, sound-on","MRC-accredited measurement (industry first)","13.3 min avg wait time = captive audience","3D interactive anatomy tools physicians use daily"],
+    talkTrack:"Phreesia is great for intake automation, but their advertising is a secondary feature squeezed into a workflow moment. Our screens own the waiting room and exam room with 100% share of voice — and we're the only POC platform with MRC-accredited metrics, which matters after the Outcome Health reset.",
+    encounters:"Likely present if practice uses tablet-based check-in"},
+  healthMonitor: { name:"Health Monitor Network", ticker:"Private", threat:"medium", revenue:"$15-28M",
+    model:"Print + light digital in 250K+ offices", reach:"450,000+ HCPs claimed",
+    weakness:["Mostly print materials — limited digital","~179 employees vs our 930+","No interactive exam room technology","Revenue is 10-15x smaller than ours"],
+    ourEdge:["Full digital ecosystem: waiting + exam + beyond","Interactive 3D anatomy library physicians rely on","40+ EHR integrations for precision targeting","Gridiron just acquired them — expect disruption"],
+    talkTrack:"Health Monitor claims big office numbers, but most touchpoints are print brochures, not digital screens. We deliver measurable, digital engagement across the entire visit — and our EHR integrations let us extend that relationship beyond the office walls.",
+    encounters:"Look for branded print materials in waiting areas"},
+  checkedUp: { name:"CheckedUp / HMN", ticker:"Private", threat:"medium", revenue:"Est. $20-40M combined",
+    model:"Exam room wallboards + waiting room displays", reach:"Growing through merger synergies",
+    weakness:["Recent merger — integration risk and distraction","Smaller network scale overall","No EHR integration or beyond-office products","No MRC accreditation"],
+    ourEdge:["4x the scale of nearest physical POC competitor","End-to-end patient journey coverage","Proven 35-year provider relationships","Advent International backing ($94B AUM)"],
+    talkTrack:"CheckedUp and HMN are merging to try to replicate what we already built. But combining two smaller networks doesn't equal our scale, our 35 years of provider trust, or our ability to follow patients beyond the office through EHR-integrated products.",
+    encounters:"Wall-mounted screens in exam rooms, branded waiting room TVs"},
+  optimizeRx: { name:"OptimizeRx", ticker:"OPRX", threat:"low-field", revenue:"$65-75M",
+    model:"EHR-embedded pharma messaging", reach:"2M+ HCPs via 300+ EHR partners",
+    weakness:["No physical presence in offices","Targets prescribing workflow, not patient education","Physician-facing only — patients never see it","Competes more with our enterprise team"],
+    ourEdge:["We engage BOTH patients and physicians","Physical presence builds practice loyalty","Our EHR integrations now compete at their layer too","Patient-facing content drives treatment conversations"],
+    talkTrack:"OptimizeRx operates inside the EHR — physicians see it, patients don't. If a practice asks about it, note that our model serves both sides: patients get educated, physicians get engagement tools, and sponsors get measurable outcomes across the full visit.",
+    encounters:"Not visible in office — lives inside EHR workflow"},
+};
+
+const PRACTICES = [
+  { id:1, name:"Midwest Cardiology Associates", specialty:"Cardiology", location:"Cleveland, OH", providers:8, status:"Prospect", cycleDay:67, competitors:["phreesia","healthMonitor"], lastVisit:"2 weeks ago", nextAction:"Follow-up demo scheduled Mar 24",
+    intel:"Front desk mentioned Phreesia contract renews in June. Practice manager expressed frustration with limited patient education content."},
+  { id:2, name:"Summit Orthopedics", specialty:"Orthopedics", location:"Akron, OH", providers:12, status:"Negotiation", cycleDay:124, competitors:["checkedUp"], lastVisit:"3 days ago", nextAction:"Send ROI comparison vs CheckedUp",
+    intel:"Currently has CheckedUp wallboards in 4 exam rooms. Physicians love the concept but want interactive anatomy models for patient consultations."},
+  { id:3, name:"Lakeview Family Medicine", specialty:"Primary Care", location:"Toledo, OH", providers:5, status:"Qualified Lead", cycleDay:21, competitors:[], lastVisit:"1 week ago", nextAction:"Schedule decision-maker meeting",
+    intel:"No current POC vendor. Practice is expanding to 3rd location. Office manager asked about costs — clarify our free-to-practice model."},
+];
+
+// ── SMALL COMPONENTS ──
+function ThreatBadge({level}) {
+  const m = {high:{bg:C.redLight,c:C.red,l:"HIGH"},medium:{bg:C.yellowLight,c:C.yellow,l:"MED"},"low-field":{bg:C.greenLight,c:C.green,l:"LOW"},low:{bg:C.greenLight,c:C.green,l:"LOW"}};
+  const v = m[level]||m.low;
+  return <span style={{background:v.bg,color:v.c,padding:"2px 8px",borderRadius:4,fontSize:11,fontWeight:700,letterSpacing:"0.05em"}}>{v.l} THREAT</span>;
+}
+function StatusBadge({status}) {
+  const m = {Prospect:{bg:C.tealLight,c:C.tealDark},Negotiation:{bg:C.yellowLight,c:C.yellow},"Qualified Lead":{bg:C.greenLight,c:C.green}};
+  const v = m[status]||{bg:C.warmGray,c:C.slate};
+  return <span style={{background:v.bg,color:v.c,padding:"2px 8px",borderRadius:4,fontSize:11,fontWeight:700}}>{status}</span>;
+}
+
+// ── BATTLECARD ──
+function Battlecard({comp, onBack}) {
+  const c = COMPS[comp];
+  const [showTalk, setShowTalk] = useState(false);
+  useEffect(()=>{ trk("battlecard_viewed",{competitor:c.name,threat_level:c.threat}); },[]);
+  return (
+    <div style={{animation:"slideIn 0.3s ease"}}>
+      <button onClick={onBack} style={{background:"none",border:"none",color:C.teal,fontSize:14,fontWeight:600,cursor:"pointer",padding:"0 0 12px",fontFamily:"inherit"}}>← Back</button>
+      <div style={{background:C.white,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+        <div style={{background:C.navy,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{color:C.white,fontSize:20,fontWeight:700}}>{c.name}</div>
+            <div style={{color:"rgba(255,255,255,0.6)",fontSize:12,marginTop:2}}>{c.ticker} · {c.revenue} · {c.model}</div>
+          </div>
+          <ThreatBadge level={c.threat}/>
+        </div>
+        <div style={{padding:20}}>
+          <div style={{fontSize:11,color:C.muted,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>Their Reach</div>
+          <div style={{fontSize:14,color:C.slate,marginBottom:16,padding:"8px 12px",background:C.warmGray,borderRadius:8}}>{c.reach}</div>
+          <div style={{fontSize:11,color:C.muted,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>🔍 Spot in the Field</div>
+          <div style={{fontSize:13,color:C.slate,marginBottom:16,padding:"8px 12px",background:C.warmGray,borderRadius:8,fontStyle:"italic"}}>{c.encounters}</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+            <div>
+              <div style={{fontSize:11,color:C.red,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6}}>Their Gaps</div>
+              {c.weakness.map((w,i)=><div key={i} style={{fontSize:12,color:C.slate,marginBottom:6,paddingLeft:12,position:"relative"}}><span style={{position:"absolute",left:0,color:C.red}}>−</span>{w}</div>)}
+            </div>
+            <div>
+              <div style={{fontSize:11,color:C.green,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6}}>Our Edge</div>
+              {c.ourEdge.map((e,i)=><div key={i} style={{fontSize:12,color:C.slate,marginBottom:6,paddingLeft:12,position:"relative"}}><span style={{position:"absolute",left:0,color:C.green}}>+</span>{e}</div>)}
+            </div>
+          </div>
+          <button onClick={()=>{if(!showTalk)trk("talk_track_opened",{competitor:c.name});setShowTalk(!showTalk);}} style={{width:"100%",padding:12,background:showTalk?C.navy:C.teal,color:C.white,border:"none",borderRadius:8,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"background 0.2s"}}>
+            {showTalk ? "Hide Talk Track" : "💬 Show Talk Track"}
+          </button>
+          {showTalk && <div style={{marginTop:12,padding:16,background:"linear-gradient(135deg,#0B1D3A,#1a3a5c)",borderRadius:8,color:C.white,fontSize:13,lineHeight:1.6,animation:"fadeIn 0.3s ease"}}>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.1em",opacity:0.6,marginBottom:8}}>AI-GENERATED TALK TRACK</div>
+            "{c.talkTrack}"
+          </div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PRACTICE CARD ──
+function PracticeCard({p, onComp}) {
+  return (
+    <div style={{background:C.white,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:12}}>
+      <div style={{padding:"16px 20px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:700,color:C.navy}}>{p.name}</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:2}}>{p.specialty} · {p.location} · {p.providers} providers</div>
+          </div>
+          <StatusBadge status={p.status}/>
+        </div>
+        <div style={{display:"flex",gap:16,margin:"12px 0",padding:"10px 12px",background:C.warmGray,borderRadius:8}}>
+          <div>
+            <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:"0.08em"}}>CYCLE DAY</div>
+            <div style={{fontSize:18,fontWeight:700,color:p.cycleDay>90?C.red:p.cycleDay>60?C.yellow:C.green}}>{p.cycleDay}</div>
+          </div>
+          <div>
+            <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:"0.08em"}}>LAST VISIT</div>
+            <div style={{fontSize:14,fontWeight:600,color:C.slate,marginTop:2}}>{p.lastVisit}</div>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:"0.08em"}}>NEXT ACTION</div>
+            <div style={{fontSize:12,color:C.slate,marginTop:2}}>{p.nextAction}</div>
+          </div>
+        </div>
+        <div style={{fontSize:11,color:C.muted,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6,marginTop:12}}>🤖 AI Field Intel</div>
+        <div style={{fontSize:13,color:C.slate,lineHeight:1.5,padding:"8px 12px",background:C.tealLight,borderRadius:8,borderLeft:`3px solid ${C.teal}`}}>{p.intel}</div>
+        {p.competitors.length > 0 && <div style={{marginTop:12}}>
+          <div style={{fontSize:11,color:C.muted,fontWeight:700,letterSpacing:"0.08em",marginBottom:6}}>COMPETITORS PRESENT</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {p.competitors.map(k=><button key={k} onClick={()=>onComp(k)} style={{padding:"6px 12px",background:C.accentLight,color:C.accent,border:`1px solid ${C.accent}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>⚔️ {COMPS[k]?.name} — View Battlecard</button>)}
+          </div>
+        </div>}
+      </div>
+    </div>
+  );
+}
+
+// ── ADOPTION DASHBOARD ──
+function AdoptionDash() {
+  const metrics = [
+    {label:"Klue Logins (Last 30d)",value:"23%",target:"60%",status:"red",detail:"Only 14 of 62 field reps logged in"},
+    {label:"Battlecard Views",value:"47",target:"250+",status:"yellow",detail:"Most views from 3 power users"},
+    {label:"CRM Intel Notes Added",value:"8",target:"50+",status:"red",detail:"Intel stays in reps' heads, not systems"},
+    {label:"Avg Days to Access CI",value:"4.2d",target:"<1d",status:"red",detail:"Reps wait until back in office"},
+  ];
+  const solutions = [
+    {problem:"Field reps don't open Klue",fix:"Push AI battlecards via SMS/email before each scheduled visit",impact:"Projected 3x increase in CI consumption",icon:"📱"},
+    {problem:"Intel trapped in reps' notebooks",fix:"Voice-to-CRM: reps dictate intel after visits, AI structures it in Salesforce + Klue",impact:"10x more competitive signals captured",icon:"🎤"},
+    {problem:"Long cycle times (avg 87 days)",fix:"AI-triggered alerts when competitor contracts are up for renewal at target practices",impact:"15-25% faster time to close on competitive displaces",icon:"⏱️"},
+    {problem:"Weekly CI digest goes unread",fix:"Replace email digest with Slack bot delivering 1 micro-insight per day at 7:30am",impact:"Projected 5x engagement vs email digest",icon:"💬"},
+  ];
+  return (
+    <div>
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:11,color:C.muted,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:12}}>Current Klue Adoption Metrics (Simulated)</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          {metrics.map((m,i)=><div key={i} style={{background:C.white,borderRadius:10,border:`1px solid ${C.border}`,padding:14}}>
+            <div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:4}}>{m.label}</div>
+            <div style={{display:"flex",alignItems:"baseline",gap:6}}>
+              <span style={{fontSize:22,fontWeight:800,color:m.status==="red"?C.red:m.status==="yellow"?C.yellow:C.green}}>{m.value}</span>
+              <span style={{fontSize:11,color:C.muted}}>target: {m.target}</span>
+            </div>
+            <div style={{fontSize:11,color:C.slate,marginTop:4}}>{m.detail}</div>
+          </div>)}
+        </div>
+      </div>
+      <div style={{fontSize:11,color:C.muted,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:12}}>AI-Powered Adoption Interventions</div>
+      {solutions.map((s,i)=><div key={i} style={{background:C.white,borderRadius:10,border:`1px solid ${C.border}`,padding:16,marginBottom:10}}>
+        <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+          <span style={{fontSize:24}}>{s.icon}</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12,color:C.red,fontWeight:700,marginBottom:4}}>Problem: {s.problem}</div>
+            <div style={{fontSize:13,color:C.navy,fontWeight:600,marginBottom:4}}>{s.fix}</div>
+            <div style={{fontSize:12,color:C.green,fontWeight:600,padding:"4px 8px",background:C.greenLight,borderRadius:4,display:"inline-block"}}>↑ {s.impact}</div>
+          </div>
+        </div>
+      </div>)}
+    </div>
+  );
+}
+
+// ── VOICE MODAL ──
+function VoiceModal({onClose, onSubmit}) {
+  const [phase, setPhase] = useState("ready");
+  const [seconds, setSeconds] = useState(0);
+  const [dots, setDots] = useState("");
+  const timerRef = useRef(null);
+
+  const transcript = "Just left Summit Orthopedics. Spoke with Dr. Patel — she's the key decision maker, not the office manager. She said their CheckedUp contract runs through August but she's frustrated with the lack of interactive content. She specifically asked if our screens can show 3D knee anatomy during consultations. Also noticed a Phreesia tablet at the front desk — that's new since my last visit. The practice is adding two new providers in Q2 which could be good timing for us.";
+  const structured = {
+    practice:"Summit Orthopedics", decisionMaker:"Dr. Patel (not office manager — update CRM)",
+    competitorUpdate:"CheckedUp contract through August; Phreesia tablet spotted at front desk (NEW)",
+    opportunity:"Wants 3D knee anatomy for consultations — demo our interactive exam room screens",
+    timing:"Adding 2 providers Q2 — expansion = ideal install window",
+    nextAction:"Schedule 3D anatomy demo with Dr. Patel before August renewal",
+  };
+
+  useEffect(()=>{
+    if(phase==="recording"){timerRef.current=setInterval(()=>setSeconds(s=>s+1),1000);}
+    return ()=>clearInterval(timerRef.current);
+  },[phase]);
+
+  useEffect(()=>{
+    if(phase==="processing"){
+      const iv=setInterval(()=>setDots(d=>d.length>=3?"":d+"."),400);
+      const to=setTimeout(()=>{clearInterval(iv);setPhase("structured");},2800);
+      return ()=>{clearInterval(iv);clearTimeout(to);};
+    }
+  },[phase]);
+
+  const handleStop=()=>{clearInterval(timerRef.current);trk("voice_recording_stopped",{duration_seconds:seconds});setPhase("processing");};
+  const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+
+  const fields = [
+    {label:"Practice",value:structured.practice,icon:"🏥"},
+    {label:"Decision Maker",value:structured.decisionMaker,icon:"👤"},
+    {label:"Competitor Update",value:structured.competitorUpdate,icon:"⚔️",hl:true},
+    {label:"Opportunity",value:structured.opportunity,icon:"💡"},
+    {label:"Timing Signal",value:structured.timing,icon:"📅"},
+    {label:"Recommended Next Action",value:structured.nextAction,icon:"→",hl:true},
+  ];
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(11,29,58,0.85)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn 0.2s ease"}} onClick={e=>{if(e.target===e.currentTarget&&phase!=="recording")onClose();}}>
+      <div style={{background:C.white,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,maxHeight:"85vh",overflowY:"auto",animation:"slideUp 0.3s ease"}}>
+        <div style={{padding:"20px 20px 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{fontSize:18,fontWeight:800,color:C.navy}}>🎤 Voice Field Intel</div>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,color:C.muted,cursor:"pointer",padding:4}}>✕</button>
+        </div>
+        <div style={{padding:20}}>
+          {phase==="ready" && <div style={{textAlign:"center",padding:"20px 0"}}>
+            <div style={{fontSize:13,color:C.slate,lineHeight:1.6,marginBottom:20,maxWidth:320,margin:"0 auto 20px"}}>Dictate what you saw and heard at the practice. AI will structure it into a CRM-ready intel note with competitor tags, next actions, and deal signals.</div>
+            <button onClick={()=>{trk("voice_recording_started");setPhase("recording");}} style={{width:80,height:80,borderRadius:40,background:C.red,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto",position:"relative"}}>
+              <div style={{width:24,height:24,borderRadius:12,background:C.white}}/>
+            </button>
+            <div style={{fontSize:12,color:C.muted,marginTop:12}}>Tap to start recording</div>
+          </div>}
+
+          {phase==="recording" && <div style={{textAlign:"center",padding:"20px 0"}}>
+            <div style={{fontSize:32,fontWeight:800,color:C.red,fontFamily:"monospace",marginBottom:8}}>{fmt(seconds)}</div>
+            <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:3,height:40,marginBottom:16}}>
+              {Array.from({length:24}).map((_,i)=><div key={i} style={{width:3,borderRadius:2,background:C.red,animation:`waveBar ${0.4+Math.random()*0.6}s ease-in-out infinite`,animationDelay:`${i*0.05}s`}}/>)}
+            </div>
+            <button onClick={handleStop} style={{width:80,height:80,borderRadius:40,background:C.red,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto",position:"relative"}}>
+              <div style={{position:"absolute",width:80,height:80,borderRadius:40,border:`3px solid ${C.red}`,animation:"pulseRing 1.5s ease-out infinite"}}/>
+              <div style={{width:24,height:24,borderRadius:4,background:C.white}}/>
+            </button>
+            <div style={{fontSize:12,color:C.muted,marginTop:12}}>Tap to stop & process</div>
+          </div>}
+
+          {phase==="processing" && <div style={{textAlign:"center",padding:"30px 0"}}>
+            <div style={{fontSize:36,marginBottom:16}}>🤖</div>
+            <div style={{fontSize:15,fontWeight:700,color:C.navy,marginBottom:8}}>AI Processing{dots}</div>
+            <div style={{fontSize:12,color:C.muted,maxWidth:280,margin:"0 auto",lineHeight:1.5}}>Transcribing audio → extracting competitor mentions → identifying deal signals → structuring CRM note</div>
+            <div style={{marginTop:20,height:4,background:C.border,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:C.teal,borderRadius:2,width:"100%",animation:"loading 2.5s ease-in-out"}}/></div>
+          </div>}
+
+          {phase==="structured" && <div style={{animation:"fadeIn 0.4s ease"}}>
+            <div style={{background:C.warmGray,borderRadius:10,padding:14,marginBottom:16,maxHeight:100,overflowY:"auto"}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:"0.08em",marginBottom:6}}>RAW TRANSCRIPT</div>
+              <div style={{fontSize:12,color:C.slate,lineHeight:1.5,fontStyle:"italic"}}>"{transcript}"</div>
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:C.teal,letterSpacing:"0.08em",marginBottom:10}}>✅ AI-STRUCTURED INTEL NOTE</div>
+            <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
+              {fields.map((f,i)=><div key={i} style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,background:f.hl?C.tealLight:"transparent"}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.muted,letterSpacing:"0.06em",marginBottom:3}}>{f.icon} {f.label.toUpperCase()}</div>
+                <div style={{fontSize:13,color:C.navy,fontWeight:500,lineHeight:1.4}}>{f.value}</div>
+              </div>)}
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:16}}>
+              <button onClick={()=>{trk("voice_intel_saved_to_crm",{practice:structured.practice});onSubmit(structured);onClose();}} style={{flex:1,padding:12,background:C.teal,color:C.white,border:"none",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Save to CRM + Klue</button>
+              <button onClick={()=>{setPhase("ready");setSeconds(0);}} style={{padding:"12px 16px",background:C.warmGray,color:C.slate,border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Redo</button>
+            </div>
+            <div style={{marginTop:14,padding:12,background:"linear-gradient(135deg,#0B1D3A,#1a3a5f)",borderRadius:8,fontSize:11,color:"rgba(255,255,255,0.7)",lineHeight:1.5,textAlign:"center"}}>
+              This note auto-syncs to Salesforce, tags competitors in Klue, and updates the practice profile — all from a 30-second voice memo in the parking lot.
+            </div>
+          </div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── REC BLOCK ──
+function Rec({num, children}) {
+  return <div style={{marginTop:16,padding:14,background:"linear-gradient(135deg,#0B1D3A,#1a3a5f)",borderRadius:10}}>
+    <div style={{fontSize:11,color:C.teal,fontWeight:700,letterSpacing:"0.08em",marginBottom:6}}>💡 RECOMMENDATION #{num}</div>
+    <div style={{fontSize:14,color:C.white,lineHeight:1.5,fontWeight:500}}>{children}</div>
+  </div>;
+}
+
+// ── MAIN APP ──
+function App() {
+  const [tab, setTab] = useState("battlecards");
+  const [selComp, setSelComp] = useState(null);
+  const [search, setSearch] = useState("");
+  const [showVoice, setShowVoice] = useState(false);
+  const [saved, setSaved] = useState(null);
+
+  useEffect(()=>{
+    trk("session_started",{landing_tab:"battlecards"});
+    const h=()=>{trk("session_ended",{total_seconds:Math.round((Date.now()-new Date(SSTART).getTime())/1000)});};
+    window.addEventListener("beforeunload",h);
+    return ()=>window.removeEventListener("beforeunload",h);
+  },[]);
+
+  const switchTab=(id)=>{trk("tab_switched",{from:tab,to:id});setTab(id);setSelComp(null);};
+  const openVoice=()=>{trk("voice_modal_opened",{from_tab:tab});setShowVoice(true);};
+
+  const tabs=[{id:"battlecards",label:"Battlecards",icon:"⚔️"},{id:"practices",label:"Practice Intel",icon:"🏥"},{id:"adoption",label:"Adoption Fix",icon:"📊"}];
+  const filtered=Object.entries(COMPS).filter(([_,c])=>c.name.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div style={{maxWidth:480,margin:"0 auto",background:C.warmGray,minHeight:"100vh",position:"relative"}}>
+      {/* HEADER */}
+      <div style={{background:"linear-gradient(135deg,#0B1D3A,#163a5f)",padding:"20px 20px 16px",position:"sticky",top:0,zIndex:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase"}}>Prototype Concept</div>
+            <div style={{fontSize:22,fontWeight:800,color:C.white,lineHeight:1.2,marginTop:2}}>PatientPoint CI</div>
+            <div style={{fontSize:12,color:C.teal,marginTop:2,fontWeight:500}}>Klue AI · Field Sales Intelligence</div>
+          </div>
+          <div style={{width:40,height:40,borderRadius:20,background:C.teal,display:"flex",alignItems:"center",justifyContent:"center",color:C.white,fontWeight:800,fontSize:16}}>PP</div>
+        </div>
+        <div style={{display:"flex",gap:4,marginTop:16}}>
+          {tabs.map(t=><button key={t.id} onClick={()=>switchTab(t.id)} style={{flex:1,padding:"8px 4px",background:tab===t.id?"rgba(0,165,181,0.2)":"rgba(255,255,255,0.05)",border:tab===t.id?`1px solid ${C.teal}`:"1px solid rgba(255,255,255,0.1)",borderRadius:8,color:tab===t.id?C.teal:"rgba(255,255,255,0.6)",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s"}}>{t.icon} {t.label}</button>)}
+        </div>
+      </div>
+
+      {/* CONTENT */}
+      <div style={{padding:16}}>
+        {tab==="battlecards" && <div style={{animation:"fadeIn 0.3s ease"}}>
+          {selComp ? <Battlecard comp={selComp} onBack={()=>setSelComp(null)}/> : <>
+            <div style={{marginBottom:12}}>
+              <input type="text" placeholder="Search competitors..." value={search} onChange={e=>setSearch(e.target.value)} style={{width:"100%",padding:"10px 14px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:14,fontFamily:"inherit",background:C.white,outline:"none"}}/>
+            </div>
+            <div style={{fontSize:11,color:C.muted,fontWeight:700,letterSpacing:"0.08em",marginBottom:8}}>TAP ANY CARD FOR FULL BATTLECARD + TALK TRACK</div>
+            {filtered.map(([key,comp])=><button key={key} onClick={()=>{trk("competitor_card_clicked",{competitor:comp.name,source:"battlecards_list"});setSelComp(key);}} style={{width:"100%",textAlign:"left",background:C.white,borderRadius:10,border:`1px solid ${C.border}`,padding:16,marginBottom:8,cursor:"pointer",fontFamily:"inherit",transition:"all 0.2s"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:16,fontWeight:700,color:C.navy}}>{comp.name}</div>
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>{comp.ticker} · {comp.revenue} · {comp.model}</div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}><ThreatBadge level={comp.threat}/><span style={{color:C.muted,fontSize:18}}>›</span></div>
+              </div>
+            </button>)}
+            <Rec num="1">Auto-push these battlecards to field reps' phones via SMS 30 minutes before each scheduled practice visit. Klue's AI can match the practice's known competitor presence to the right card — reps never need to open the platform.</Rec>
+          </>}
+        </div>}
+
+        {tab==="practices" && <div style={{animation:"fadeIn 0.3s ease"}}>
+          {selComp ? <Battlecard comp={selComp} onBack={()=>setSelComp(null)}/> : <>
+            <div style={{fontSize:11,color:C.muted,fontWeight:700,letterSpacing:"0.08em",marginBottom:10}}>AI-ENRICHED PRACTICE PROFILES · SYNCED FROM CRM</div>
+            {PRACTICES.map(p=><PracticeCard key={p.id} p={p} onComp={c=>setSelComp(c)}/>)}
+            <Rec num="2">Use Klue's AI to auto-generate practice-specific briefs that combine CRM data, known competitor installs, and contract renewal timing. Field reps get a one-page "cheat sheet" for every visit — reducing prep from 30+ minutes to zero and compressing cycle times by surfacing the right competitive angle at the right moment.</Rec>
+          </>}
+        </div>}
+
+        {tab==="adoption" && <div style={{animation:"fadeIn 0.3s ease"}}>
+          <AdoptionDash/>
+          <Rec num="3">Stop measuring "Klue logins" — measure "competitive intelligence consumed." Push CI into the tools reps already use: SMS battlecards before visits, Slack micro-insights each morning, and auto-populated CRM fields. The AI layer turns Klue from a destination into a distribution engine. Adoption isn't a training problem — it's a delivery problem.</Rec>
+        </div>}
+      </div>
+
+      {/* FOOTER */}
+      <div style={{padding:"12px 16px 100px",textAlign:"center"}}>
+        <div style={{fontSize:11,color:C.muted,lineHeight:1.5}}>Prototype built to demonstrate AI-powered competitive intelligence delivery for PatientPoint's field sales team.<br/>All competitor data sourced from public filings, POCMA reports, and industry analysis.</div>
+      </div>
+
+      {/* FAB */}
+      {(tab==="battlecards"||tab==="practices")&&!selComp && <>
+        <button onClick={openVoice} style={{position:"fixed",bottom:24,right:"calc(50% - 220px)",width:56,height:56,borderRadius:28,background:"linear-gradient(135deg,#E74C3C,#c0392b)",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px rgba(231,76,60,0.4)",zIndex:20,transition:"transform 0.2s"}} onMouseEnter={e=>e.currentTarget.style.transform="scale(1.1)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+          <span style={{fontSize:24}}>🎤</span>
+        </button>
+        <div style={{position:"fixed",bottom:30,right:"calc(50% - 160px)",background:C.navy,color:C.white,fontSize:11,fontWeight:700,padding:"6px 10px",borderRadius:6,zIndex:20,whiteSpace:"nowrap",boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>Dictate Field Intel</div>
+      </>}
+
+      {/* VOICE MODAL */}
+      {showVoice && <VoiceModal onClose={()=>setShowVoice(false)} onSubmit={intel=>{setSaved(intel);setTimeout(()=>setSaved(null),4000);}}/>}
+
+      {/* TOAST */}
+      {saved && <div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",background:C.green,color:C.white,padding:"12px 20px",borderRadius:10,fontSize:13,fontWeight:700,zIndex:200,boxShadow:"0 4px 20px rgba(46,204,113,0.4)",animation:"fadeIn 0.3s ease",maxWidth:400,textAlign:"center"}}>✅ Intel saved! CRM updated · Klue tagged · Practice profile enriched</div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
 </html>
